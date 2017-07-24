@@ -43,38 +43,60 @@ class RegressionCNN(nn.Module):
         self.vgg_fc8 = nn.Linear(4096, 1, bias=False)
        
         self.vgg_pool = nn.MaxPool2d(2,2)
+	self.dropout01 = nn.Dropout(0.1)
+	self.dropout05 = nn.Dropout(0.5)
+	self.dropout03 = nn.Dropout(0.3)
+	self.dropout04 = nn.Dropout(0.4)
 
     def forward(self, x): 
+	x = self.dropout01(x)
         x = F.relu(self.vgg_conv1_1(x))
+	x = self.dropout03(x)
         x = F.relu(self.vgg_conv1_2(x))
         x = self.vgg_pool(x)
         
+	x = self.dropout03(x)
         x = F.relu(self.vgg_conv2_1(x))
-        x = F.relu(self.vgg_conv2_2(x))
+        x = self.dropout03(x)
+	x = F.relu(self.vgg_conv2_2(x))
         x = self.vgg_pool(x)
 
+	x = self.dropout03(x)
         x = F.relu(self.vgg_conv3_1(x))
+	x = self.dropout03(x)
         x = F.relu(self.vgg_conv3_2(x))
+	x = self.dropout03(x)
         x = F.relu(self.vgg_conv3_3(x))
         x = self.vgg_pool(x)
         
+	x = self.dropout04(x)
         x = F.relu(self.vgg_conv4_1(x))
+	x = self.dropout04(x)
         x = F.relu(self.vgg_conv4_2(x))
+	x = self.dropout04(x)
         x = F.relu(self.vgg_conv4_3(x))
         x = self.vgg_pool(x)
 
+	x = self.dropout04(x)
         x = F.relu(self.vgg_conv5_1(x))
+	x = self.dropout04(x)
         x = F.relu(self.vgg_conv5_2(x))
+	x = self.dropout04(x)
         x = F.relu(self.vgg_conv5_3(x))
         x = self.vgg_pool(x)
         
+	x = self.dropout05(x)
         x = F.relu(self.vgg_conv6_1(x))
+	x = self.dropout05(x)
         x = F.relu(self.vgg_conv6_2(x))
+	x = self.dropout05(x)
         x = F.relu(self.vgg_conv6_3(x))
         x = self.vgg_pool(x)
 
+	x = self.dropout05(x)
         x = x.view(-1, 8*8*512)
         x = self.vgg_fc6(x)
+	x = self.dropout05(x)
         x = self.vgg_fc7(x)
         x = self.vgg_fc8(x)
         
@@ -93,7 +115,7 @@ def grad_clip(net, max_grad = 0.1):
             if (magnitude.data[0] > max_grad):
                 p_grad.data = (max_grad*p_grad/magnitude.data[0]).data
 
-if __name__ == '__main__':
+def train():
     use_cuda = True
 
     # Create network & related training objects
@@ -110,7 +132,7 @@ if __name__ == '__main__':
     criterion = nn.MSELoss()
 
     # Load data
-    h5_dict = LoadH5('../data/traffic-data/dataset1_count_aux.h5')
+    h5_dict = LoadH5('../data/traffic-data/dataset2_count_aux.h5')
     train_x = h5_dict['train_x'].astype(np.float32)
     test_x = h5_dict['test_x'].astype(np.float32)
     train_y = h5_dict['train_y'].astype(np.float32)
@@ -135,19 +157,19 @@ if __name__ == '__main__':
     test_y = test_y[:,0]
  
     # Meta params
-    batch_size = 4
+    batch_size = 3
     num_train = train_x.size()[0]
     num_test = test_x.size()[0]
     num_ite_per_e = int(np.ceil(float(num_train)/float(batch_size)))
     full_ind = np.arange(num_train)
     rng = np.random.RandomState(1311) 
     all_loss = []
-    num_e_to_reduce_lr = 30
+    num_e_to_reduce_lr = 50
     max_grad = 2 # For grad clip
 
     # Save params
     save_freq = 15
-    save_path = '../data/trained_model/traffic-regression-dl/'
+    save_path = '../data/trained_model/traffic-regression-dl/dataset2/'
     save_name = '24-07-17_net'
     meta_name = '24-07-17_meta'
     save_list = glob.glob(save_path + save_name + '*.dat')
@@ -168,7 +190,7 @@ if __name__ == '__main__':
     
     print('Current learning rate: %f' % init_lr)
 
-    for e in range(600): 
+    for e in range(last_e, 600): 
         running_loss = 0.0
 
         # Divide lr by 1.5 after 200 epochv
@@ -178,7 +200,7 @@ if __name__ == '__main__':
             optimizer.param_groups[0]['lr'] = init_lr
 
         for i in range(num_ite_per_e): 
-            #rng.shuffle(full_ind)
+            rng.shuffle(full_ind)
             optimizer.zero_grad()
             
             if (i+1)*batch_size <= num_train:
@@ -204,10 +226,13 @@ if __name__ == '__main__':
             all_loss.append(loss.data[0])
             
             if ((i % num_ite_to_log) == (num_ite_to_log-1)):
-                print('[%d, %d] loss: %.3f' % (e+1, e*num_ite_per_e+i+1, running_loss/100)) 
+                print('[%d, %d] loss: %.3f' % (e+1, e*num_ite_per_e+i+1, running_loss/num_ite_to_log)) 
                 running_loss = 0.0
 
         if (e % save_freq == (save_freq-1)):
             print('Saving at epoch %d' % e)
 	    torch.save({'state_dict': net.state_dict(), 'opt': optimizer.state_dict()}, save_path + save_name + ('_%03d' % e) + '.dat')
-            SaveList([e, running_loss, all_loss], save_path + meta_name + ('m%03d' % e) + '.dat') 
+            SaveList([e, running_loss, all_loss], save_path + meta_name + ('_%03d' % e) + '.dat') 
+
+if __name__ == '__main__':
+    train() 
