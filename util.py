@@ -2,7 +2,7 @@ import numpy as np
 import h5py
 import os
 import pdb
-
+import cPickle
 def create_one_hot(target_vector, num_class, dtype=np.float32):
     """create_one_hot
     Generate one-hot 4D tensor from a target vector of length N (num sample)

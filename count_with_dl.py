@@ -40,7 +40,7 @@ class RegressionCNN(nn.Module):
 
         self.vgg_fc6 = nn.Linear(8*8*512, 4096)
         self.vgg_fc7 = nn.Linear(4096, 4096)
-        self.vgg_fc8 = nn.Linear(4096, 1)
+        self.vgg_fc8 = nn.Linear(4096, 1, bias=False)
        
         self.vgg_pool = nn.MaxPool2d(2,2)
 
@@ -83,14 +83,14 @@ class RegressionCNN(nn.Module):
 
 
 if __name__ == '__main__':
-    use_cuda = False
+    use_cuda = True
 
     # Create network & related training objects
     net = RegressionCNN()
     if (use_cuda):
         net.cuda()
     
-    init_lr = 0.001
+    init_lr = 0.0001
     train_params = []
     for p in net.parameters(): 
         if (p.requires_grad):
@@ -107,8 +107,8 @@ if __name__ == '__main__':
     train_mean = h5_dict['mean'].astype(np.float32)
     
     # For debug purpose
-    train_x = train_x[0:4,:,:,:]
-    train_y = train_y[0:4,:]
+    #train_x = train_x[0:4,:,:,:]
+    #train_y = train_y[0:4,:]
 
     # Mean norm
     train_x = train_x - train_mean
@@ -124,27 +124,26 @@ if __name__ == '__main__':
     test_y = test_y[:,0]
  
     # Meta params
-    batch_size = 2
+    batch_size = 4
     num_train = train_x.size()[0]
     num_test = test_x.size()[0]
     num_ite_per_e = int(np.ceil(float(num_train)/float(batch_size)))
     full_ind = np.arange(num_train)
     rng = np.random.RandomState(1311) 
     all_loss = []
-    num_e_to_reduce_lr = 200
+    num_e_to_reduce_lr = 30
 
     # Save params
-    save_freq = 5
+    save_freq = 15
     save_path = '../data/trained_model/traffic-regression-dl/'
-    save_name = '24-07-17'
-    meta_name = save_name + '_meta'
+    save_name = '24-07-17_net'
+    meta_name = '24-07-17_meta'
     save_list = glob.glob(save_path + save_name + '*.dat')
     last_e = 0
     
     # Printing and tracking params
     num_ite_to_log = 10
-
-
+  
     if (len(save_list) > 0): 
         save_list = sorted(save_list)[-1]
         print('Loading network save at %s' % save_list) 
@@ -157,7 +156,7 @@ if __name__ == '__main__':
     
     print('Current learning rate: %f' % init_lr)
 
-    for e in range(1000): 
+    for e in range(600): 
         running_loss = 0.0
 
         # Divide lr by 1.5 after 200 epochv
@@ -178,13 +177,13 @@ if __name__ == '__main__':
             if (use_cuda):
                 batch_x = Variable(train_x[torch.LongTensor(batch_range.tolist())].cuda())
                 batch_y = Variable(train_y[torch.LongTensor(batch_range.tolist())].cuda())
-            else:
-                pdb.set_trace()
+            else: 
                 batch_x = Variable(train_x[torch.LongTensor(batch_range.tolist())])
                 batch_y = Variable(train_y[torch.LongTensor(batch_range.tolist())])
 
             outputs = net(batch_x)
-            loss = criterion(outputs, batch_y)
+            #pdb.set_trace()
+	    loss = criterion(outputs, batch_y)
             loss.backward()
             optimizer.step()
             
@@ -196,5 +195,6 @@ if __name__ == '__main__':
                 running_loss = 0.0
 
         if (e % save_freq == (save_freq-1)):
-            torch.save({'state_dict': net.state_dict(), 'opt': optimizer.state_dict()}, save_path + save_name + ('%03d' % e) + '.dat')
-            SaveList([e, running_loss, all_loss], save_path + meta_name + ('%03d' % e) + '.dat') 
+            print('Saving at epoch %d' % e)
+	    torch.save({'state_dict': net.state_dict(), 'opt': optimizer.state_dict()}, save_path + save_name + ('_%03d' % e) + '.dat')
+            SaveList([e, running_loss, all_loss], save_path + meta_name + ('m%03d' % e) + '.dat') 
