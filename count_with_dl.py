@@ -80,7 +80,18 @@ class RegressionCNN(nn.Module):
         
         return x
 
-
+def grad_clip(net, max_grad = 0.1):
+    params = [p for p in list(net.parameters()) if p.requires_grad==True]
+    for p in params:
+        p_grad = p.grad 
+    
+        if (type(p_grad) == type(None)):
+            pdb.set_trace()
+            here = 1 
+        else:
+            magnitude = torch.sqrt(torch.sum(p_grad**2)) 
+            if (magnitude.data[0] > max_grad):
+                p_grad.data = (max_grad*p_grad/magnitude.data[0]).data
 
 if __name__ == '__main__':
     use_cuda = True
@@ -132,6 +143,7 @@ if __name__ == '__main__':
     rng = np.random.RandomState(1311) 
     all_loss = []
     num_e_to_reduce_lr = 30
+    max_grad = 2 # For grad clip
 
     # Save params
     save_freq = 15
@@ -185,6 +197,7 @@ if __name__ == '__main__':
             #pdb.set_trace()
 	    loss = criterion(outputs, batch_y)
             loss.backward()
+            grad_clip(net, max_grad)
             optimizer.step()
             
             running_loss += loss.data[0]
