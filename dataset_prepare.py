@@ -77,15 +77,28 @@ def dataset_pack(datadir, max_num_img, imw=512, imh=512, train_ratio=0.7, normal
 
 if __name__ == '__main__':
     # Create auxilary data for dataset 1
-    datadir = '/media/kien/D80079EB0079D14C/IPCV group/Datasets/jpg/'
-    labelpath = '../data/traffic-data/dataset1_countlabel.mat'
+    #datadir = '/media/kien/D80079EB0079D14C/IPCV group/Datasets/jpg/'
+    #labelpath = '../data/traffic-data/dataset1_countlabel.mat'
+    #h5_dict =  dataset_pack(datadir, 1000)
+    #label = scipy.io.loadmat(labelpath) 
+    #label = label['Dataset']
+    #label = np.delete(label, 3, 1)
+    #label = label[0:1000,:]
+    #h5_dict['train_y'] = label[0:700,:]
+    #h5_dict['test_y'] = label[700:1000,:]
+
+    #pdb.set_trace()
+    #SaveH5(h5_dict, '../data/traffic-data/dataset1_count_aux.h5')
+
+    datadir = '/media/kien/D80079EB0079D14C/IPCV group/Datasets/trungnguyen-renamed/'
+    labelpath = '../data/traffic-data/dataset2_countlabel.mat'
     h5_dict =  dataset_pack(datadir, 1000)
-    label = scipy.io.loadmat(labelpath) 
+    label = scipy.io.loadmat(labelpath)
     label = label['Dataset']
-    label = np.delete(label, 3, 1)
+    pdb.set_trace()
     label = label[0:1000,:]
     h5_dict['train_y'] = label[0:700,:]
     h5_dict['test_y'] = label[700:1000,:]
 
     pdb.set_trace()
-    SaveH5(h5_dict, '../data/traffic-data/dataset1_count_aux.h5')
+    SaveH5(h5_dict, '../data/traffic-data/dataset2_count_aux.h5')
