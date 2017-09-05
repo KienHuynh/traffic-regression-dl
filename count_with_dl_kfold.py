@@ -19,6 +19,8 @@ init_lr = 0.0000125
 
 #
 num_fold = 5
+num_e = 500
+num_frac_test = 30
 
 save_path = '../data/trained_model/traffic-regression-dl/dataset2/'
 save_name = prefix + '-fold=%d_net'
@@ -35,7 +37,7 @@ def train_kfold_i(train_x, train_y, train_mean, fold_idx):
     """
     global use_cuda, save_path, save_name, meta_name
 
-    # Create network & related training objects
+    # Create network & related training objects 
     net = RegressionCNN()
     if (use_cuda):
         net.cuda()
@@ -73,27 +75,26 @@ def train_kfold_i(train_x, train_y, train_mean, fold_idx):
     # Save params
     save_freq = 100
     
-    save_name = save_name % fold_idx
-    meta_name = meta_name % fold_idx
-    save_list = glob.glob(save_path + save_name + '*.dat')
-    last_e = 0
-    
+    save_name_local = save_name % fold_idx
+    meta_name_local = meta_name % fold_idx
+    save_list = glob.glob(save_path + save_name_local + '*.dat')
+    last_e = -1
+
     # Printing and tracking params
-    num_ite_to_log = 1
-  
+    num_ite_to_log = 1 
     if (len(save_list) > 0): 
         save_list = sorted(save_list)[-1]
         print('Loading network save at %s' % save_list) 
         loadobj = torch.load(save_list)
         net.load_state_dict(loadobj['state_dict'])
         optimizer.load_state_dict(loadobj['opt'])
+        del loadobj
         init_lr = optimizer.param_groups[0]['lr']
-        save_list = sorted(glob.glob(save_path + meta_name + '*.dat'))[-1]
-        last_e, running_loss, all_loss = LoadList(save_list) 
-    
+        save_list = sorted(glob.glob(save_path + meta_name_local + '*.dat'))[-1]
+        last_e, running_loss, all_loss, train_mean = LoadList(save_list)  
     print('Current learning rate: %f' % init_lr)
 
-    for e in range(last_e, 500): 
+    for e in range(last_e+1, num_e): 
         running_loss = 0.0
 
         # Divide lr by 1.5 after 200 epochv
@@ -129,17 +130,17 @@ def train_kfold_i(train_x, train_y, train_mean, fold_idx):
             all_loss.append(loss.data[0])
             
             if ((i % num_ite_to_log) == (num_ite_to_log-1)):
-                print('%s - [%d, %d] loss: %.3f' % (save_name, e+1, e*num_ite_per_e+i+1, running_loss/num_ite_to_log)) 
+                print('%s - [%d, %d] loss: %.3f' % (save_name_local, e+1, e*num_ite_per_e+i+1, running_loss/num_ite_to_log)) 
                 running_loss = 0.0
 
         if (e % save_freq == (save_freq-1)):
             abc = 1
             print('Saving at epoch %d' % e)
-	    torch.save({'state_dict': net.state_dict(), 'opt': optimizer.state_dict()}, save_path + save_name + ('_%03d' % e) + '.dat')
-            SaveList([e, running_loss, all_loss, train_mean], save_path + meta_name + ('_%03d' % e) + '.dat') 
+	    torch.save({'state_dict': net.state_dict(), 'opt': optimizer.state_dict()}, save_path + save_name_local + ('_%03d' % e) + '.dat')
+            SaveList([e, running_loss, all_loss, train_mean], save_path + meta_name_local + ('_%03d' % e) + '.dat') 
 
 
-def test_kfold_i(test_x, test_y, fold_idx, train, dropout_scale_factor, save):
+def test_kfold_i(test_x, test_y, fold_idx, train, dropout_scale_factor, verbal, save):
     """test_kfold_i
 
     :param test_x: test data
@@ -181,10 +182,10 @@ def test_kfold_i(test_x, test_y, fold_idx, train, dropout_scale_factor, save):
     all_loss = []
 
     # Save params 
-    save_name = save_name % fold_idx
-    test_name = test_name % fold_idx
+    save_name_local = save_name % fold_idx
+    test_name_local = test_name % fold_idx
 
-    save_list = glob.glob(save_path + save_name + '*.dat')
+    save_list = glob.glob(save_path + save_name_local + '*.dat')
     last_e = 0
     
     # Printing and tracking params
@@ -196,7 +197,7 @@ def test_kfold_i(test_x, test_y, fold_idx, train, dropout_scale_factor, save):
         loadobj = torch.load(save_list)
         net.load_state_dict(loadobj['state_dict']) 
     
-    if (not Train):
+    if (not train):
         net.train(False)  
     for i in range(num_ite_per_e):   
         if (i+1)*batch_size <= num_test:
@@ -210,7 +211,7 @@ def test_kfold_i(test_x, test_y, fold_idx, train, dropout_scale_factor, save):
         else: 
             batch_x = Variable(test_x[torch.LongTensor(batch_range.tolist())])
             
-        outputs = net.forward(batch_x)/(1-dropout_scale_factor) 
+        outputs = net.forward(batch_x)*dropout_scale_factor
         test_pred[batch_range] = outputs.data.cpu().numpy()
         
     test_y = test_y.numpy().reshape((num_test,1))
@@ -220,31 +221,20 @@ def test_kfold_i(test_x, test_y, fold_idx, train, dropout_scale_factor, save):
     re = np.abs(test_pred - test_y)/test_y
     mre = np.mean(re)
     mre_std = np.sqrt(np.mean((re-mre)**2))
-    print('MAE: %.3f' % mae)
-    print('MAE std: %.3f' % mae_std)
-    print('MRE: %.3f' % mre)
-    print('MRE std: %.3f' % mre_std)
+
+    if (verbal):
+        print('MAE: %.3f' % mae)
+        print('MAE std: %.3f' % mae_std)
+        print('MRE: %.3f' % mre)
+        print('MRE std: %.3f' % mre_std)
     
     if (save):
-        SaveList([test_pred, test_y, mae, mae_std, mre, mre_std, dropout_scale_factor], save_path + 'test_result/' + test_name + '.dat')
+        SaveList([test_pred, test_y, mae, mae_std, mre, mre_std, dropout_scale_factor], save_path + 'test_result/' + test_name_local + '.dat')
     
     return test_pred
 
 def kfold():
-    global use_cuda, save_path, save_name, meta_name, test_name     
-
-    # Create network & related training objects
-    net = RegressionCNN()
-    if (use_cuda):
-        net.cuda()
-    
-    init_lr = 0.0000125
-    train_params = []
-    for p in net.parameters(): 
-        if (p.requires_grad):
-            train_params.append(p)
-    #optimizer = optim.SGD(train_params, lr=init_lr, momentum=0.9)
-    optimizer = optim.Adam(train_params, lr=init_lr)
+    global use_cuda, save_path, save_name, meta_name, test_name      
     
     criterion = nn.MSELoss()
 
@@ -263,7 +253,7 @@ def kfold():
 
     n_sample_per_fold = n_sample/num_fold
     
-    for i in range(num_fold):   
+    for i in range(0,num_fold):      
         test_idx = range(i*n_sample_per_fold,(i+1)*n_sample_per_fold)
         train_idx = range(0, n_sample)
         train_idx = [idx for idx in train_idx if (not(idx in test_idx))]
@@ -281,26 +271,30 @@ def kfold():
         train_mean = train_mean.astype(np.float32)
         train_x = train_x - train_mean
         test_x = test_x - train_mean
-         
+        
+        save_name_local = save_name % i
+        save_list = glob.glob(save_path + '')
         train_kfold_i(train_x, train_y, train_mean, i)
         
         # Check if testing was done for that fold
         # If yes, skip it
-        test_name = test_name % i
-        test_list = glob.glob(save_path + 'test_result/' + test_name + '*.dat')
+        test_name_local = test_name % i
+        test_list = glob.glob(save_path + 'test_result/' + test_name_local + '*.dat')
         if (len(test_list)==0):
             # Run prediction on train data with test-mode Dropout
-            testmode_pred = test_kfold_i(train_x, train_y, i, False, 0, False)
-
-            # Run prediction on train data for 30 times with train-mode dropout
-            fracs = np.zeros((30,1))
-            for j in range(0,30):
-                trainmode_pred = test_kfold_i(train_x, train_y, i, True, 0, False)
-                fracs[i] = np.sum(testmode_pred)/np.sum(trainmode_pred)
-            fracs = np.mean(fracs)
+            testmode_pred = test_kfold_i(train_x, train_y, i, False, 1, False, False)
+            print('Computing prediction on train dataset with train mode off...')
             
+            # Run prediction on train data for 30 times with train-mode dropout
+            fracs = np.zeros((num_frac_test,1))
+            for j in range(0,num_frac_test):
+                trainmode_pred = test_kfold_i(train_x, train_y, i, True, 1, False, False)
+                fracs[j] = np.sum(trainmode_pred)/np.sum(testmode_pred)
+                print('Computing prediction on train dataset with train mode on... %d/%d' % (j+1, 30))
+
+            fracs = np.mean(fracs)
             # Run prediction and evaluation on test data
-            test_kfold_i(test_x, test_y, i, False, 1-fracs, True)
+            test_kfold_i(test_x, test_y, i, False, fracs, True, True)
 
 if __name__ == '__main__':
     kfold()
