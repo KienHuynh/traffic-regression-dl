@@ -22,7 +22,7 @@ num_fold = 5
 num_e = 500
 num_frac_test = 30
 
-save_path = '../data/trained_model/traffic-regression-dl/dataset2/'
+save_path = '../data/trained_model/traffic-regression-dl/dataset1/'
 save_name = prefix + '-fold=%d_net'
 meta_name = prefix + '-fold=%d_meta'
 test_name = prefix + '-fold=%d_test'
@@ -239,7 +239,7 @@ def kfold():
     criterion = nn.MSELoss()
 
     # Load data
-    h5_dict = LoadH5('../data/traffic-data/dataset2_count_aux.h5')
+    h5_dict = LoadH5('../data/traffic-data/dataset1_count_aux.h5')
     train_x = h5_dict['train_x'].astype(np.float32)
     test_x = h5_dict['test_x'].astype(np.float32)
     train_y = h5_dict['train_y'].astype(np.float32)
