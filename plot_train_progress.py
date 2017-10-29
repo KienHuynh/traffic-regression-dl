@@ -6,13 +6,13 @@ import glob
 import pdb
 if __name__ == "__main__":
     save_path = '../data/trained_model/traffic-regression-dl/dataset2/'
-    meta_name = '24-07-17_meta'
+    meta_name = '03-08-17_meta'
     save_list = sorted(glob.glob(save_path + meta_name + '*.dat'))[-1]
     last_e, running_loss, all_loss = LoadList(save_list) 
     
     # Plotting
-    sm_factor = 50 # Smoothing factor
-    start = 100
+    sm_factor = 1# Smoothing factor
+    start = 1000
     end = -1
     plt.plot(all_loss[start:end:sm_factor])
     #plt.yscale('log')
