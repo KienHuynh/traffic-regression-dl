@@ -1,4 +1,5 @@
 import numpy as np
+import scipy.ndimage, scipy.misc
 import torch
 
 import torch.nn as nn
@@ -13,19 +14,50 @@ import pdb
 
 from net import RegressionCNN, grad_clip
 
-prefix = '21-08-17'
+#prefix = '21-08-17'
+prefix = '17-01-18'
+
 use_cuda = True
 init_lr = 0.0000125
 
 #
 num_fold = 5
-num_e = 500
-num_frac_test = 30
+num_e = 180
+num_frac_test = 0
+num_test_time = 1
 
-save_path = '../data/trained_model/traffic-regression-dl/dataset1/'
+save_path = '../data/trained_model/traffic-regression-dl/dataset2/'
 save_name = prefix + '-fold=%d_net'
 meta_name = prefix + '-fold=%d_meta'
 test_name = prefix + '-fold=%d_test'
+
+def random_transform(batch_x, angle):
+    """random_transform
+    Random flip and/or rotate the image
+    :param batch_x: image batch
+    :param angle: angle std to rorate
+    """
+    imh = batch_x.shape[2]
+    imw = batch_x.shape[3]
+    for i in range(batch_x.shape[0]):
+        batch_xi = batch_x[i,:,:,:]
+        batch_xi = np.transpose(batch_xi, (1,2,0))
+        ishflip = np.random.randint(0, 1)
+        isvflip = np.random.randint(0, 1)
+        if (int(ishflip)):
+            batch_xi = batch_xi[:,::-1,:]
+        if (int(isvflip)):
+            batch_xi = batch_xi[::-1,:,:]
+        if (np.random.randint(10) >= 5):         
+            #angle = np.random.uniform(min_angle, max_angle)
+            angle = 10*np.random.randn(1)
+
+            batch_xi = scipy.ndimage.interpolation.rotate(batch_xi, angle)
+        batch_xi = scipy.misc.imresize(batch_xi, (imh, imw), interp='bicubic')
+        batch_xi = np.transpose(batch_xi, (2,0,1))
+        batch_x[i,:,:,:] = batch_xi 
+
+    return batch_x
 
 def train_kfold_i(train_x, train_y, train_mean, fold_idx):
     """train_kfold_i
@@ -57,14 +89,14 @@ def train_kfold_i(train_x, train_y, train_mean, fold_idx):
     #train_y = train_y[0:2,:] 
 
     # Put these numpy arrays into torch tensor
-    train_x = torch.from_numpy(train_x)
-    train_y = torch.from_numpy(train_y)
+    #train_x = torch.from_numpy(train_x)
+    #train_y = torch.from_numpy(train_y)
 
     train_y = train_y[:,0]
  
     # Meta params
     batch_size = 2
-    num_train = train_x.size()[0]
+    num_train = train_x.shape[0]
     num_ite_per_e = int(np.ceil(float(num_train)/float(batch_size)))
     full_ind = np.arange(num_train)
     rng = np.random.RandomState(1311) 
@@ -73,7 +105,7 @@ def train_kfold_i(train_x, train_y, train_mean, fold_idx):
     max_grad = 0.2 # For grad clip
 
     # Save params
-    save_freq = 100
+    save_freq = 60
     
     save_name_local = save_name % fold_idx
     meta_name_local = meta_name % fold_idx
@@ -81,7 +113,7 @@ def train_kfold_i(train_x, train_y, train_mean, fold_idx):
     last_e = -1
 
     # Printing and tracking params
-    num_ite_to_log = 1 
+    num_ite_to_log = 5 
     if (len(save_list) > 0): 
         save_list = sorted(save_list)[-1]
         print('Loading network save at %s' % save_list) 
@@ -112,15 +144,25 @@ def train_kfold_i(train_x, train_y, train_mean, fold_idx):
             else:
                 batch_range = range(i*batch_size, num_train)
             batch_range = full_ind[batch_range]
+            # Get a batch and transform it randomly
+            #pdb.set_trace()
+            #batch_x = train_x[batch_range,:,:,:]
+            batch_x = random_transform(train_x[batch_range, :, :, :], 30)
+            batch_y = train_y[batch_range]
+            
+            # Convert to torch tensor
+            batch_x = torch.from_numpy(batch_x)
+            batch_y = torch.from_numpy(batch_y)
+
             if (use_cuda):
-                batch_x = Variable(train_x[torch.LongTensor(batch_range.tolist())].cuda())
-                batch_y = Variable(train_y[torch.LongTensor(batch_range.tolist())].cuda())
+                batch_x = Variable(batch_x.cuda())
+                batch_y = Variable(batch_y.cuda())
             else: 
-                batch_x = Variable(train_x[torch.LongTensor(batch_range.tolist())])
-                batch_y = Variable(train_y[torch.LongTensor(batch_range.tolist())])
+                batch_x = Variable(batch_x)
+                batch_y = Variable(batch_y)
  
             outputs = net(batch_x)
-	    #pdb.set_trace()
+            #pdb.set_trace()
             loss = criterion(outputs, batch_y)
             loss.backward()
             grad_clip(net, max_grad)
@@ -142,7 +184,7 @@ def train_kfold_i(train_x, train_y, train_mean, fold_idx):
 
 def test_kfold_i(test_x, test_y, fold_idx, train, dropout_scale_factor, verbal, save):
     """test_kfold_i
-
+    
     :param test_x: test data
     :param test_y: test label
     :param fold_idx: number of the current fold
@@ -153,9 +195,7 @@ def test_kfold_i(test_x, test_y, fold_idx, train, dropout_scale_factor, verbal, 
     global use_cuda, save_path, save_name, meta_name, test_name
     #dropout_scale_factor = 0.18
     # Create network & related training objects
-    net = RegressionCNN()
-    if (use_cuda):
-        net.cuda() 
+    
 
     # For debug purpose
     #train_x = train_x[0:4,:,:,:]
@@ -168,6 +208,7 @@ def test_kfold_i(test_x, test_y, fold_idx, train, dropout_scale_factor, verbal, 
     num_test = test_y.shape[0]
 
     #train_x = torch.from_numpy(train_x)
+    test_x = random_transform(test_x, 30)
     test_x = torch.from_numpy(test_x)
     test_y = torch.from_numpy(test_y)
 
@@ -181,7 +222,9 @@ def test_kfold_i(test_x, test_y, fold_idx, train, dropout_scale_factor, verbal, 
     rng = np.random.RandomState(1311) 
     all_loss = []
 
-    # Save params 
+    net = RegressionCNN()
+    if (use_cuda):
+        net.cuda() 
     save_name_local = save_name % fold_idx
     test_name_local = test_name % fold_idx
 
@@ -189,13 +232,12 @@ def test_kfold_i(test_x, test_y, fold_idx, train, dropout_scale_factor, verbal, 
     last_e = 0
     
     # Printing and tracking params
-    num_ite_to_log = 10
-    
     if (len(save_list) > 0): 
         save_list = sorted(save_list)[-1]
         print('Loading network save at %s' % save_list) 
         loadobj = torch.load(save_list)
-        net.load_state_dict(loadobj['state_dict']) 
+        net.load_state_dict(loadobj['state_dict'])
+
     
     if (not train):
         net.train(False)  
@@ -211,7 +253,7 @@ def test_kfold_i(test_x, test_y, fold_idx, train, dropout_scale_factor, verbal, 
         else: 
             batch_x = Variable(test_x[torch.LongTensor(batch_range.tolist())])
             
-        outputs = net.forward(batch_x)*dropout_scale_factor
+        outputs = net.forward(batch_x)*float(dropout_scale_factor)
         test_pred[batch_range] = outputs.data.cpu().numpy()
         
     test_y = test_y.numpy().reshape((num_test,1))
@@ -222,16 +264,8 @@ def test_kfold_i(test_x, test_y, fold_idx, train, dropout_scale_factor, verbal, 
     mre = np.mean(re)
     mre_std = np.sqrt(np.mean((re-mre)**2))
 
-    if (verbal):
-        print('MAE: %.3f' % mae)
-        print('MAE std: %.3f' % mae_std)
-        print('MRE: %.3f' % mre)
-        print('MRE std: %.3f' % mre_std)
-    
-    if (save):
-        SaveList([test_pred, test_y, mae, mae_std, mre, mre_std, dropout_scale_factor], save_path + 'test_result/' + test_name_local + '.dat')
-    
-    return test_pred
+     
+    return test_pred, mae, mae_std, mre, mre_std
 
 def kfold():
     global use_cuda, save_path, save_name, meta_name, test_name      
@@ -239,7 +273,7 @@ def kfold():
     criterion = nn.MSELoss()
 
     # Load data
-    h5_dict = LoadH5('../data/traffic-data/dataset1_count_aux.h5')
+    h5_dict = LoadH5('../data/traffic-data/dataset2_count_aux.h5')
     train_x = h5_dict['train_x'].astype(np.float32)
     test_x = h5_dict['test_x'].astype(np.float32)
     train_y = h5_dict['train_y'].astype(np.float32)
@@ -280,21 +314,56 @@ def kfold():
         # If yes, skip it
         test_name_local = test_name % i
         test_list = glob.glob(save_path + 'test_result/' + test_name_local + '*.dat')
+
         if (len(test_list)==0):
             # Run prediction on train data with test-mode Dropout
-            testmode_pred = test_kfold_i(train_x, train_y, i, False, 1, False, False)
-            print('Computing prediction on train dataset with train mode off...')
-            
+            #pdb.set_trace()
+            #testmode_pred = test_kfold_i(train_x, train_y, i, False, 1, False, False)
+                        
             # Run prediction on train data for 30 times with train-mode dropout
-            fracs = np.zeros((num_frac_test,1))
-            for j in range(0,num_frac_test):
-                trainmode_pred = test_kfold_i(train_x, train_y, i, True, 1, False, False)
-                fracs[j] = np.sum(trainmode_pred)/np.sum(testmode_pred)
-                print('Computing prediction on train dataset with train mode on... %d/%d' % (j+1, 30))
+            # fracs = np.ones((num_frac_test,1))
+            #for j in range(0,num_frac_test):
 
-            fracs = np.mean(fracs)
-            # Run prediction and evaluation on test data
-            test_kfold_i(test_x, test_y, i, False, fracs, True, True)
+            #    trainmode_pred = test_kfold_i(train_x, train_y, i, True, 1, False, False)
 
+            #    pdb.set_trace()
+            #    fracs[j] = np.sum(trainmode_pred)/np.sum(testmode_pred)
+            #    print('Computing prediction on train dataset with train mode on... %d/%d' % (j+1, 30))
+            #if (num_frac_test == 0):
+            #    fracs = 1
+            # fracs = np.mean(fracs)
+            # fracs = np.sum(train_y[:,0])/np.sum(testmode_pred) 
+                        
+            test_pred = np.zeros_like(test_y)
+            mae = 0
+            mae_std = 0
+            mre = 0
+            mre_std = 0
+            for j in range(num_test_time):
+                test_pred_, mae_, mae_std_, mre_, mre_std_ = test_kfold_i(test_x.copy(), test_y, i, False, 1, True, True)
+                test_pred += test_pred_
+                mae += mae_
+                mre += mre_
+                mae_std += mae_std_
+                mre_std += mre_std_
+                print('Running test number %d/%d...' % (j+1, num_test_time))
+                print('MAE: %.3f' % (mae/float(j+1)))
+                print('MAE std: %.3f' % (mae_std/float(j+1)))
+                print('MRE: %.3f' % (mre/float(j+1)))
+                print('MRE std: %.3f\n' % (mre_std/float(j+1)))
+            
+            mae /= float(num_test_time)
+            mae_std /= float(num_test_time)
+            mre /= float(num_test_time)
+            mre_std /= float(num_test_time)
+            test_pred /= float(num_test_time)
+
+            SaveList([mae, mae_std, mre, mre_std], save_path + 'test_result/' + test_name_local + '.dat')
+            with open(save_path + 'test_result/' + test_name_local + '.txt', 'w') as f:
+                f.write('MAE: %.3f\n' % mae)
+                f.write('MAE std: %.3f\n' % mae_std)
+                f.write('MRE: %.3f\n' % mre)
+                f.write('MRE std: %.3f\n' % mre_std)   
+            
 if __name__ == '__main__':
     kfold()
