@@ -44,10 +44,10 @@ class RegressionCNN(nn.Module):
         self.vgg_fc8 = nn.Linear(4096, 1, bias=False)
        
         self.vgg_pool = nn.MaxPool2d(2,2)
-	self.dropout01 = nn.Dropout(0.1)
-	self.dropout02 = nn.Dropout(0.2)
-	self.dropout03 = nn.Dropout(0.3)
-	self.dropout04 = nn.Dropout(0.4)
+        self.dropout01 = nn.Dropout(0.1)
+        self.dropout02 = nn.Dropout(0.2)
+        self.dropout03 = nn.Dropout(0.3)
+        self.dropout04 = nn.Dropout(0.4)
         self.dropout05 = nn.Dropout(0.5)
         self.leakyrelu = nn.LeakyReLU(0.1)
 
@@ -63,10 +63,10 @@ class RegressionCNN(nn.Module):
         
 	# x = self.dropout05(x)  
         x = self.leakyrelu(self.vgg_conv2_1(x))
-	x = self.leakyrelu(self.vgg_conv2_2(x))
+        x = self.leakyrelu(self.vgg_conv2_2(x))
         # x = self.dropout05(x)
         x = self.leakyrelu(self.vgg_conv2_3(x))
-	x = self.leakyrelu(self.vgg_conv2_4(x))
+        x = self.leakyrelu(self.vgg_conv2_4(x))
         x = self.vgg_pool(x)
 
 	# x = self.dropout05(x)

@@ -22,7 +22,7 @@ init_lr = 0.0000125
 
 #
 num_fold = 5
-num_e = 180
+num_e = 120
 num_frac_test = 0
 num_test_time = 1
 
@@ -178,7 +178,7 @@ def train_kfold_i(train_x, train_y, train_mean, fold_idx):
         if (e % save_freq == (save_freq-1)):
             abc = 1
             print('Saving at epoch %d' % e)
-	    torch.save({'state_dict': net.state_dict(), 'opt': optimizer.state_dict()}, save_path + save_name_local + ('_%03d' % e) + '.dat')
+            torch.save({'state_dict': net.state_dict(), 'opt': optimizer.state_dict()}, save_path + save_name_local + ('_%03d' % e) + '.dat')
             SaveList([e, running_loss, all_loss, train_mean], save_path + meta_name_local + ('_%03d' % e) + '.dat') 
 
 
@@ -285,9 +285,10 @@ def kfold():
     all_y = np.concatenate([train_y, test_y], axis=0) 
     n_sample = all_x.shape[0]
 
-    n_sample_per_fold = n_sample/num_fold
+    n_sample_per_fold = int(n_sample/num_fold)
     
     for i in range(0,num_fold):      
+    #for i in [3]:
         test_idx = range(i*n_sample_per_fold,(i+1)*n_sample_per_fold)
         train_idx = range(0, n_sample)
         train_idx = [idx for idx in train_idx if (not(idx in test_idx))]
@@ -357,8 +358,7 @@ def kfold():
             mre /= float(num_test_time)
             mre_std /= float(num_test_time)
             test_pred /= float(num_test_time)
-
-            SaveList([mae, mae_std, mre, mre_std], save_path + 'test_result/' + test_name_local + '.dat')
+            SaveList([test_pred_, test_y, mae, mae_std, mre, mre_std], save_path + 'test_result/' + test_name_local + '.dat')
             with open(save_path + 'test_result/' + test_name_local + '.txt', 'w') as f:
                 f.write('MAE: %.3f\n' % mae)
                 f.write('MAE std: %.3f\n' % mae_std)
